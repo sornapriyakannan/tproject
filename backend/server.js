@@ -41,21 +41,49 @@ app.post("/register", async (req, res) => {
 });
 
 app.post("/login", async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        const user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ message: "Invalid email or password" });
+  try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+          return res.status(400).json({ message: "All fields are required." });
+      }
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid email or password" });
+      // Check if the user exists
+      const user = await User.findOne({ email });
+      if (!user) {
+          return res.status(401).json({ message: "Invalid Email or Password" });
+      }
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+      // Verify password
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+          return res.status(401).json({ message: "Invalid Email or Password" });
+      }
 
-        res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
-    } catch (err) {
-        res.status(500).json({ message: "Server Error" });
-    }
+      // Determine user role based on email domain
+      let role;
+      if (email.endsWith("@admin.com")) {
+          role = "admin";
+      } else if (email.endsWith("@manager.com")) {
+          role = "manager";
+      } else if (email.endsWith("@gmail.com")) {
+          role = "employee";
+      } else {
+          return res.status(403).json({ message: "Unauthorized email domain." });
+      }
+
+      // Generate JWT token
+      const token = jwt.sign({ id: user._id, role }, "secretKey", { expiresIn: "1h" });
+
+      res.status(200).json({ token, role, message: "Logged in successfully" });
+
+  } catch (error) {
+      console.error("Login Error:", error.message);
+      res.status(500).json({ message: "Internal Server Error" });
+  }
 });
+
+
+  
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
